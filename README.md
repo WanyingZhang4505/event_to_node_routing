@@ -86,3 +86,39 @@ git push
 | `Password authentication is not supported` | 密码框里填了登录密码 | 改填 Personal Access Token |
 | `could not read Password ... No such device` | 在非交互终端里 push 需要输密码 | 在自己的交互终端里执行,或先设置 `credential.helper store` |
 | `git: 'command' is not a git command` | 命令打错了 | 是 `git commit`,不是 `git command` |
+
+# 2. Ground-truth Dataset Generation (Simple)
+
+## 2.1 块 1:生成 hierarchical 序列 meta(第 1、2 步)
+
+- 生成底层 item 序列:AR + seasonality + trend — **自由变量,生成**
+  - generate 1 time series for each bottom item/node, so # of generated time series = # of bottom nodes  - **EACH** generated time series contains all components of **AR(autoregression) + seasonality + trend**
+  > 注意⚠️: **Heterogenity** is required among generated time series.
+  > 🟩 ***Parameterize*** them per node with controlled variables. For example:
+  > - ***Trend*** towards parameter `slope` + `breakpoint` 
+  (E.g. `slope=+0.03` or `slope=-0.05`, `breakpoint=T/2`)
+  > - ***Seasonality*** towards parameter `amplitude` + `period` + `hamonics` 
+  (E.g. `amplitude=4`, `period=52`, `hamonics=3`)
+  > - ***AR*** towards parameter `phi` 
+  (E.g. `phi=(0.7, -0.25)`)
+  更多去[学习&练习基础AR建模](./AR_practice.py)
+
+- category、total = 逐层 sum 派生 — **派生变量,绝不生成**
+- assert 加总成立 + 画图确认
+
+## 2.2 块 2:一组 signal 字段 → 三条平行的路(关键修正在这)
+
+```
+signal = {target_level, window, effect_size, (+可选的促销描述字段)}
+```
+
+- **路 A 注入**:只在 `target_level` 的成员、`window` 内,给 treated 序列加 effect
+  (treated = baseline + effect;baseline 留着,用于知道 effect 真值)
+- **路 B 渲染**:把 signal 字段填进模板 / LLM → 一句文本(题面)
+- **路 C 标签**:把 `target_level` 和 `window` 存为 ground-truth 路由标签(答案)— **别漏**
+
+## 2.3 块 3:代入并评估(拆清两个 baseline)
+
+- 输入 = 文本 + 历史序列;预测目标 = treated 序列
+- 我的 routing 方法 **vs** no-routing 方法(ablation baseline)
+- 比 MASE / WRMSSE,并分层、分窗口看提升是否落在路由标签指定的位置
