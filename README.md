@@ -38,6 +38,8 @@ git remote set-url origin https://WanyingZhang4505@github.com/WanyingZhang4505/e
 
 > 踩过的坑:如果机器上缓存/填成了别的账号(如 `alice330000`),而它对仓库没有写权限,push 会报 `403 Permission denied`。用上面的命令指定正确用户名即可。
 
+
+
 ## 1.4 让机器记住 token(一劳永逸)
 
 Trillium 是远程共享集群,没有浏览器 SSO / 系统钥匙串,默认每次 push 都要输 token。开启凭据存储只需一次:
@@ -49,6 +51,8 @@ git config --global credential.helper store
 下次 push 时输入一次用户名 + token,凭据会保存在 `~/.git-credentials`,以后自动认证。
 
 > 更安全的替代方案是用 SSH 密钥:`ssh-keygen -t ed25519` 生成后,把 `~/.ssh/id_ed25519.pub` 加到 [https://github.com/settings/keys](https://github.com/settings/keys),再把 remote 换成 `git@github.com:WanyingZhang4505/event_to_node_routing.git`,之后完全免 token。
+
+
 
 ## 1.5 提交并推送改动
 
@@ -78,33 +82,49 @@ rm ~/.git-credentials
 git push
 ```
 
+
+
 ## 常见报错速查
 
-| 报错 | 原因 | 解决 |
-| --- | --- | --- |
-| `Permission ... denied to <account>` (403) | 认证账号对仓库无写权限 | `git remote set-url` 指定正确账号,或让 owner 加你为 collaborator |
-| `Password authentication is not supported` | 密码框里填了登录密码 | 改填 Personal Access Token |
-| `could not read Password ... No such device` | 在非交互终端里 push 需要输密码 | 在自己的交互终端里执行,或先设置 `credential.helper store` |
-| `git: 'command' is not a git command` | 命令打错了 | 是 `git commit`,不是 `git command` |
+
+| 报错                                           | 原因                 | 解决                                                    |
+| -------------------------------------------- | ------------------ | ----------------------------------------------------- |
+| `Permission ... denied to <account>` (403)   | 认证账号对仓库无写权限        | `git remote set-url` 指定正确账号,或让 owner 加你为 collaborator |
+| `Password authentication is not supported`   | 密码框里填了登录密码         | 改填 Personal Access Token                              |
+| `could not read Password ... No such device` | 在非交互终端里 push 需要输密码 | 在自己的交互终端里执行,或先设置 `credential.helper store`            |
+| `git: 'command' is not a git command`        | 命令打错了              | 是 `git commit`,不是 `git command`                       |
+
+
+
 
 # 2. Ground-truth Dataset Generation (Simple)
+
+
 
 ## 2.1 块 1:生成 hierarchical 序列 meta(第 1、2 步)
 
 - 生成底层 item 序列:AR + seasonality + trend — **自由变量,生成**
   - generate 1 time series for each bottom item/node, so # of generated time series = # of bottom nodes  - **EACH** generated time series contains all components of **AR(autoregression) + seasonality + trend**
-  > 注意⚠️: **Heterogenity** is required among generated time series.
-  > 🟩 ***Parameterize*** them per node with controlled variables. For example:
-  > - ***Trend*** towards parameter `slope` + `breakpoint` 
-  (E.g. `slope=+0.03` or `slope=-0.05`, `breakpoint=T/2`)
-  > - ***Seasonality*** towards parameter `amplitude` + `period` + `hamonics` 
-  (E.g. `amplitude=4`, `period=52`, `hamonics=3`)
-  > - ***AR*** towards parameter `phi` 
-  (E.g. `phi=(0.7, -0.25)`)
-  更多去[学习&练习基础AR建模](./AR_practice.py)
-
+    > 注意⚠️: **Heterogenity** is required among generated time series.
+    > 🟩 ***Parameterize*** them per node with controlled variables. For example:
+    >
+    > - ***Trend*** towards parameter `slope` + `breakpoint`
+    >
+    > (E.g. `slope = [0.03, -0.05`, `breakpoint=T/2`)
+    >
+    > - ***Seasonality*** towards parameter `amplitude` + `period` + `hamonics`
+    >
+    > (E.g. `amplitude=4`, `period=52`, `hamonics=3`)
+    >
+    > - ***AR*** towards parameter `phi`
+    >
+    > (E.g. `phi=[0.7, -0.25]`) 
+    > 更多去[学习&练习基础AR建模](./ar_generatoin.py#10-36)
+生成代码看[生成底层node time series: AR + Trend + Seasonality](./ar_generatoin.py#40-68)
 - category、total = 逐层 sum 派生 — **派生变量,绝不生成**
 - assert 加总成立 + 画图确认
+
+
 
 ## 2.2 块 2:一组 signal 字段 → 三条平行的路(关键修正在这)
 
@@ -113,12 +133,15 @@ signal = {target_level, window, effect_size, (+可选的促销描述字段)}
 ```
 
 - **路 A 注入**:只在 `target_level` 的成员、`window` 内,给 treated 序列加 effect
-  (treated = baseline + effect;baseline 留着,用于知道 effect 真值)
+(treated = baseline + effect;baseline 留着,用于知道 effect 真值)
 - **路 B 渲染**:把 signal 字段填进模板 / LLM → 一句文本(题面)
 - **路 C 标签**:把 `target_level` 和 `window` 存为 ground-truth 路由标签(答案)— **别漏**
+
+
 
 ## 2.3 块 3:代入并评估(拆清两个 baseline)
 
 - 输入 = 文本 + 历史序列;预测目标 = treated 序列
 - 我的 routing 方法 **vs** no-routing 方法(ablation baseline)
 - 比 MASE / WRMSSE,并分层、分窗口看提升是否落在路由标签指定的位置
+
