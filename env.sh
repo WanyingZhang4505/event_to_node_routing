@@ -13,3 +13,4 @@ fi
 
 # activate the environment (run everytime)
 conda activate ar_practice
+cd data/synthetic
