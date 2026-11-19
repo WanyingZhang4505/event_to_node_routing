@@ -53,7 +53,7 @@ print("Coherent Error (should be 0): ", err)
 
 # 4. Inject Shock/Signal (generated ground-truth impact to node in location-wise and time window-wise)
 # a. Set-up: Shock period and value
-shock_s, shock_e, shock_v = 88, 96, 50*rng.random()   # 窗口落在预测区 [80,100) 内
+shock_s, shock_e, shock_v = 68, 80, 50*rng.random()
 shock = np.zeros(T)
 shock[shock_s:shock_e] = shock_v
 
@@ -86,7 +86,7 @@ print(" Hierarchy shock total: ", hierarchy_shock["shock"].sum())
 print("结论: ", "是的" if A_shock["shock"].sum()==hierarchy_shock["shock"].sum() else "Shock不只存在于A, 请检查！")
 
 # 5. Forecastting Model - Seasonal Naive
-def season_navie(hist:np.ndarray, m:int, h:int):
+def season_navie(hist:array, m:int, h:int):
     """The simplest forecating model without parameters. Used for validation of problem reasonablity.
         m: seasonality period / number of time steps for 1 season
         h: prediction period / number of time steps for predistion
@@ -96,8 +96,8 @@ def season_navie(hist:np.ndarray, m:int, h:int):
     # season naive model
     pred = np.zeros(h)
     for each_pred in range(h):
-        idx = len(hist_no_pred) - m + (each_pred % m)
-        pred[each_pred] = hist_no_pred[idx]
+        idx = len(hist) - m + (each_pred % m)
+        pred[each_pred] = hist[idx]
     # append pred, return new entire ts
     new_ts = np.append(hist_no_pred,pred)
 
@@ -117,50 +117,9 @@ print(A_shock["y"][68], A_shock_forcast[80])
 
 
 # 6. Routing Ablation
-H = 20                       # 预测 horizon 长度(最后 H 步)
-m = seasonality_period
-
-# 每条 item 的真值(treated):A 真实打了 promo(在 horizon 窗口内),B/C 没有
-true = {"A": A_shock["y"], "B": B["y"], "C": C["y"]}
-
-# horizon 索引 + promo 窗口(落在 horizon 内)
-h_idx = np.arange(T - H, T)                         # [80..99]
-in_window = (h_idx >= shock_s) & (h_idx < shock_e)  # horizon 上标记 promo 生效的时刻
-effect = shock_v
-
-# 每条 item 的 seasonal-naive 底座预测(只取 horizon 部分;历史干净,不含 promo)
-def naive_h(hist):
-    return season_navie(np.asarray(hist), m, H)[-H:]
-
-base = {k: naive_h(v) for k, v in true.items()}
-
-def with_promo(f):                                  # 在窗口内加 effect
-    f = f.copy(); f[in_window] += effect; return f
-
-methods = {
-    # 6.1 correct: promo 加在 A(判断对了),B/C 正常 naive
-    "correct": {"A": with_promo(base["A"]), "B": base["B"], "C": base["C"]},
-    # 6.2 wrong: promo 加在 B(判断错了),A/C 正常 naive
-    "wrong":   {"A": base["A"], "B": with_promo(base["B"]), "C": base["C"]},
-    # 6.3 no-routing: 三条都正常 naive,不加 effect
-    "none":    {"A": base["A"], "B": base["B"], "C": base["C"]},
-}
-
-# 7. 用 MASE 比较三个方法
-def mase(actual, forecast, train, m):
-    train = np.asarray(train)
-    scale = np.mean(np.abs(train[m:] - train[:-m]))   # 训练集内 seasonal-naive 的 MAE(尺度)
-    return np.mean(np.abs(np.asarray(actual) - np.asarray(forecast))) / scale
-
-print("\n===== Step 7: MASE(整体 / 只看窗口)=====")
-for name, fc in methods.items():
-    overall, window = [], []
-    for k in ("A", "B", "C"):
-        actual = true[k][T-H:]      # 真值(horizon 部分)
-        train  = true[k][:T-H]      # 训练集(用于尺度归一)
-        overall.append(mase(actual, fc[k], train, m))
-        window.append(mase(actual[in_window], fc[k][in_window], train, m))
-    print(f"{name:8s} overall={np.mean(overall):.3f}  window={np.mean(window):.3f}")
+# 6.1 correct routing - routing in A, no change for B & C -> forecast
+# 6.2 wrong routing - routing in B, no change 
+# 6.3 no routing/average routing 
 
 # Step LAST: plot & save figures
 plt.legend()
